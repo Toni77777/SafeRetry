@@ -1,0 +1,123 @@
+name: CI
+
+# Pull requests only. Nothing runs on a push to main, and there is no manual
+# trigger — the whole point of this workflow is to gate a PR before it lands.
+# A direct push to main is therefore unchecked; keep changes flowing through
+# PRs, or add `push: branches: [main]` back if that ever stops being true.
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Selecting the toolchain once, here, applies it to every tool in every job —
+# `swift`, `xcodebuild`, and the DocC plugin alike — and needs no `sudo
+# xcode-select` step. Pinned to 27.0 rather than relying on the image default,
+# so a default bump to 27.1/27.2 cannot silently change what CI validates.
+#
+# `xcode-27` is an Apple-silicon-only image (macOS 27, Xcode 27.0 default) and
+# is still a public-preview label. If it ever stops resolving, `macos-26` is the
+# GA fallback — but it ships Xcode 26.x, so update DEVELOPER_DIR to match.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
+
+jobs:
+  test:
+    name: Test (macOS, ${{ matrix.configuration }})
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [debug, release]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Swift version
+        run: swift --version && xcodebuild -version
+
+      - name: Build
+        run: swift build -c ${{ matrix.configuration }}
+
+      # `-c release` needs `-Xswiftc -enable-testing` for @testable imports.
+      - name: Test
+        run: |
+          if [ "${{ matrix.configuration }}" = "release" ]; then
+            swift test -c release -Xswiftc -enable-testing
+          else
+            swift test -c debug
+          fi
+
+  warnings:
+    name: No warnings
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v5
+
+      # The library must stay warning-free under Swift 6 strict concurrency.
+      - name: Build and fail on any warning
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee build.log
+          if grep -E '(^|: )warning:' build.log; then
+            echo "::error::Build produced warnings"
+            exit 1
+          fi
+
+  thread-sanitizer:
+    name: Thread sanitizer
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v5
+
+      # The actor-isolation and generation-counter logic in CircuitBreaker is
+      # exactly the class of code a data-race detector earns its keep on.
+      - name: Test under TSan
+        run: swift test --sanitize=thread
+
+  platforms:
+    name: Build (${{ matrix.platform }})
+    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: iOS
+            destination: 'generic/platform=iOS Simulator'
+          - platform: tvOS
+            destination: 'generic/platform=tvOS Simulator'
+          - platform: watchOS
+            destination: 'generic/platform=watchOS Simulator'
+    steps:
+      - uses: actions/checkout@v5
+
+      # These destinations resolve only if the matching platform is installed
+      # for the selected Xcode. That is what broke under Xcode 16 on macos-15 —
+      # "iOS 18.0 is not installed" — and why these jobs failed from the start.
+      # The xcode-27 image carries the iOS/tvOS/watchOS 27.0 simulator runtimes.
+      - name: Build for ${{ matrix.platform }}
+        run: |
+          xcodebuild build \
+            -scheme SafeRetry \
+            -destination '${{ matrix.destination }}' \
+            -skipPackagePluginValidation
+
+  documentation:
+    name: Documentation
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v5
+
+      # DocC warnings are invisible to a normal build, so they only stay at
+      # zero if something checks.
+      - name: Build DocC and fail on any warning
+        env:
+          SAFERETRY_BUILD_DOCS: '1'
+        run: |
+          set -o pipefail
+          swift package generate-documentation --target SafeRetry 2>&1 | tee docc.log
+          if grep -E '^[[:space:]]*warning:' docc.log; then
+            echo "::error::DocC produced warnings"
+            exit 1
+          fi
