@@ -200,6 +200,25 @@ struct RetryPolicyEventTests {
         #expect(callCount.withLock { $0 } == 2)
     }
 
+    @Test("without shouldRetry, a breaker rejection ends the sequence like a veto")
+    func breakerRejectionEmitsNoExhaustion() async {
+        let recorder = Recorder()
+        let policy = RetryPolicy(
+            maxAttempts: 5,
+            delay: .fixed(.milliseconds(50)),
+            onEvent: recorder.record,
+            sleep: { _ in }
+        )
+
+        await #expect(throws: CircuitBreakerError.self) {
+            try await policy.execute {
+                throw CircuitBreakerError.open(retryAfter: .seconds(30))
+            }
+        }
+
+        #expect(recorder.tags == ["started(1)", "failed(1, next: nil)"])
+    }
+
     // MARK: - Delay Reporting
 
     @Test("the reported next delay is the delay actually slept")

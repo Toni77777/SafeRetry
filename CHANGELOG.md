@@ -52,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`RetryPolicy` no longer retries `CircuitBreakerError` by default.** A
+  retry wrapped around an open breaker used to make every one of its attempts —
+  each rejected instantly, the operation never running — and wait out the whole
+  backoff schedule between them: about 3 s for `PolicyChain.Preset.default`,
+  about three minutes for `.aggressive`. Without a `shouldRetry`,
+  `execute(_:)` — and so the presets, `PolicyChain.retry(…)` with no predicate,
+  and `SafeRetry.retry` — now gives up at the first rejection, ending the
+  sequence the way a veto does (no `retryExhausted`). A `shouldRetry` you pass
+  replaces that default and is consulted for `CircuitBreakerError` too, so
+  `shouldRetry: { _, _ in true }` restores the old behaviour.
+  `URLSession.data(for:retrying:)` is unaffected: its transient-error allowlist
+  never retried `CircuitBreakerError`.
 - **Repository renamed to `SafeRetry`.** The package now lives at
   `https://github.com/Toni77777/SafeRetry.git`, so its SwiftPM identity
   matches the library: depend on it with
@@ -239,10 +251,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   6.0, so older Swift 6 compilers can attempt the build; they are untested.
 - `PolicyChain.Preset` was described in "retries" while its counts are
   attempts: `.default` is 3 attempts (at most 2 retries), `.aggressive` 10,
-  `.conservative` 2. Corrected in DocC, the README, and `CLAUDE.md`, and the
-  README now spells out what a predicate-less preset does against an open
-  breaker (about 3 s of pointless backoff for `.default`, about three minutes
-  for `.aggressive`).
+  `.conservative` 2. Corrected in DocC, the README, and `CLAUDE.md`.
 - The RxSwift migration guide told readers to "map the operator order directly
   — SafeRetry uses the same outermost-first ordering". It does not: each Rx
   operator wraps the ones above it, so `.timeout(10).retry(3)` is a per-attempt
@@ -283,12 +292,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unbounded probe holds the only trial slot indefinitely, so every later call is
   rejected with `.halfOpenRejected` (whose `retryAfter` is `nil`) until an
   explicit `reset()`.
-- Corrected the README's "`circuitBreaker` inside `retry`" guidance. An open
-  breaker does not cut the retry loop short — every attempt still runs and every
-  backoff delay is still waited out. The docs now show the `shouldRetry`
-  predicate that does give up at the first rejection. The neighbouring
-  "`circuitBreaker` outside `retry`" bullet was an ungrammatical fragment and has
-  been rewritten.
+- The README's "`circuitBreaker` outside `retry`" bullet was an ungrammatical
+  fragment and has been rewritten.
 - Fixed the README snippet labelled "Immediate retry" that in fact used
   `SafeRetry.retry`'s default `.exponential(base: .seconds(1))`, so a documented
   in-memory cache retry slept ~3 seconds. Both forms are now shown explicitly.

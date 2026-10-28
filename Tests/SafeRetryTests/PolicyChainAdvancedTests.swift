@@ -188,6 +188,43 @@ struct PolicyChainAdvancedTests {
         #expect(result == 2)
     }
 
+    @Test("a preset over an open breaker gives up at the first rejection")
+    func presetFailsFastOnOpenBreaker() async {
+        let presets: [(name: String, chain: PolicyChain)] = [
+            ("default", PolicyChain.Preset.default),
+            ("aggressive", PolicyChain.Preset.aggressive),
+        ]
+
+        for preset in presets {
+            // A frozen clock keeps the breaker open for the whole test.
+            let start = ContinuousClock().now
+            let rejections = OSAllocatedUnfairLock(initialState: 0)
+            let breaker = CircuitBreaker(
+                failureThreshold: 1,
+                timeout: .seconds(30),
+                onEvent: { event in
+                    if case .circuitCallRejected = event { rejections.withLock { $0 += 1 } }
+                },
+                now: { start }
+            )
+            try? await breaker.execute { throw TestError() }
+
+            // The presets build their retry with a real sleep (#4), and their
+            // first backoff is 1 s (`.default`) or 500 ms (`.aggressive`). A
+            // guard well inside that turns a retry still waiting out its
+            // backoff into a TimeoutError, instead of spending seconds or —
+            // for `.aggressive` — minutes before the counts below can fail.
+            let guardPolicy = TimeoutPolicy(duration: .milliseconds(250))
+            await #expect(throws: CircuitBreakerError.self, "\(preset.name)") {
+                try await guardPolicy.execute {
+                    try await preset.chain.circuitBreaker(breaker).execute { 1 }
+                }
+            }
+
+            #expect(rejections.withLock { $0 } == 1, "\(preset.name)")
+        }
+    }
+
     @Test("Preset.conservative times out slow operations", .timeLimit(.minutes(1)))
     func presetConservativeTimeout() async {
         do {

@@ -171,8 +171,9 @@ let (data, response) = try await URLSession.shared.data(
 `data(for:resilience:)` applies a whole ``PolicyChain`` instead, and retries
 whatever that chain's retry policy retries — which, for a chain built with the
 `retry(attempts:…)` shorthand or a ``PolicyChain/Preset``, means **every**
-error, transient or not. Supply a `shouldRetry` predicate when you want the
-filtered behaviour:
+error except ``CircuitBreakerError``, transient or not. Supply a `shouldRetry`
+predicate when you want the filtered behaviour; it replaces that default, so it
+decides for ``CircuitBreakerError`` too:
 
 ```swift
 let chain = PolicyChain

@@ -280,11 +280,11 @@ struct DocumentedUsageTests {
         #expect(StateKind(await breaker.state) == .open)
     }
 
-    // MARK: - README: an open breaker does not cut the retry loop short
+    // MARK: - README: an open breaker cuts the retry loop short
 
-    @Test("an open breaker inside a retry still consumes every attempt")
-    func openBreakerDoesNotEndRetryLoop() async {
-        // README §Choosing an order — "it does *not* cut the loop short".
+    @Test("an open breaker inside a retry ends the loop at the first rejection")
+    func openBreakerEndsRetryLoop() async {
+        // README §Choosing an order — "the retry gives up there".
         let breaker = CircuitBreaker(failureThreshold: 1, timeout: .seconds(30))
         try? await breaker.execute { throw TransientError() }
 
@@ -299,7 +299,7 @@ struct DocumentedUsageTests {
             try await PolicyChain.retry(policy).circuitBreaker(breaker).execute { 1 }
         }
 
-        #expect(rejections.withLock { $0 } == 3, "all three attempts run and are rejected")
+        #expect(rejections.withLock { $0 } == 1, "no attempt follows the first rejection")
     }
 
     // MARK: - MigratingFromRxSwift: retry outside timeout bounds each attempt
@@ -329,10 +329,11 @@ struct DocumentedUsageTests {
         #expect(result == 3)
     }
 
-    // MARK: - README: shouldRetry gives up at the first rejection
+    // MARK: - README: a shouldRetry predicate replaces the default
 
-    @Test("the documented predicate stops the loop at the first breaker rejection")
-    func shouldRetryVetoesBreakerRejections() async {
+    @Test("the documented opt-out predicate retries through every rejection")
+    func shouldRetryRetriesBreakerRejections() async {
+        // README §Choosing an order — `{ _, _ in true }` keeps retrying.
         let breaker = CircuitBreaker(failureThreshold: 1, timeout: .seconds(30))
         try? await breaker.execute { throw TransientError() }
 
@@ -343,12 +344,12 @@ struct DocumentedUsageTests {
 
         await #expect(throws: CircuitBreakerError.self) {
             try await PolicyChain
-                .retry(policy, shouldRetry: { error, _ in !(error is CircuitBreakerError) })
+                .retry(policy, shouldRetry: { _, _ in true })
                 .circuitBreaker(breaker)
                 .execute { 1 }
         }
 
-        #expect(attempts.withLock { $0 } == 1)
+        #expect(attempts.withLock { $0 } == 3)
     }
 
     // MARK: - CircuitBreaker: successThreshold is not strictly consecutive

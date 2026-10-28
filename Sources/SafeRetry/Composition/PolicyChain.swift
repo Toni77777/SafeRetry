@@ -90,6 +90,8 @@ public struct PolicyChain: Sendable {
     ///   - policy: A configured ``RetryPolicy``.
     ///   - shouldRetry: Optional predicate that decides whether a failed attempt
     ///     should be retried. Receives the thrown error and the 1-based attempt index.
+    ///     When `nil`, every error except ``CircuitBreakerError`` is retried; a
+    ///     predicate replaces that default rather than refining it.
     /// - Returns: A new chain containing the retry policy.
     public static func retry(
         _ policy: RetryPolicy,
@@ -111,6 +113,8 @@ public struct PolicyChain: Sendable {
     ///   - jitter: The jitter strategy. Defaults to ``JitterStrategy/none``.
     ///   - shouldRetry: Optional predicate that decides whether a failed attempt
     ///     should be retried. Receives the thrown error and the 1-based attempt index.
+    ///     When `nil`, every error except ``CircuitBreakerError`` is retried; a
+    ///     predicate replaces that default rather than refining it.
     /// - Returns: A new chain containing a retry policy.
     public static func retry(
         attempts: Int,
@@ -166,6 +170,8 @@ public struct PolicyChain: Sendable {
     ///   - policy: A configured ``RetryPolicy``.
     ///   - shouldRetry: Optional predicate that decides whether a failed attempt
     ///     should be retried. Receives the thrown error and the 1-based attempt index.
+    ///     When `nil`, every error except ``CircuitBreakerError`` is retried; a
+    ///     predicate replaces that default rather than refining it.
     /// - Returns: A new chain with the retry policy added as the next inner layer.
     public func retry(
         _ policy: RetryPolicy,
@@ -187,6 +193,8 @@ public struct PolicyChain: Sendable {
     ///   - jitter: The jitter strategy. Defaults to ``JitterStrategy/none``.
     ///   - shouldRetry: Optional predicate that decides whether a failed attempt
     ///     should be retried. Receives the thrown error and the 1-based attempt index.
+    ///     When `nil`, every error except ``CircuitBreakerError`` is retried; a
+    ///     predicate replaces that default rather than refining it.
     /// - Returns: A new chain with the retry policy added as the next inner layer.
     public func retry(
         attempts: Int,
@@ -341,11 +349,9 @@ extension PolicyChain {
         /// first call plus up to 9 retries) with exponential backoff (0.5 s
         /// base).
         ///
-        /// Without a predicate this retries every error, including
-        /// ``CircuitBreakerError``: appended to an open breaker, it waits out
-        /// roughly three minutes of backoff while every attempt is rejected.
-        /// Pass a `shouldRetry` that excludes the rejection when you build such
-        /// a chain yourself.
+        /// Like every preset, it does not retry ``CircuitBreakerError``:
+        /// appended to an open breaker, it gives up at the first rejection
+        /// instead of waiting out roughly three minutes of backoff.
         public static var aggressive: PolicyChain {
             PolicyChain
                 .retry(
