@@ -34,7 +34,8 @@ public enum SafeRetry: Sendable {
     ///   - delay: The backoff strategy. Defaults to exponential with a 1 s base.
     ///   - operation: The async throwing closure to retry.
     /// - Returns: The value produced by `operation` on the first successful attempt.
-    /// - Throws: The last error after all attempts are exhausted, or the
+    /// - Throws: The last error after all attempts are exhausted, a
+    ///   ``CircuitBreakerError`` as soon as an attempt throws one, or the
     ///   cancellation error if the task is cancelled.
     public static func retry<T: Sendable>(
         attempts: Int,

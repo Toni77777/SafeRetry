@@ -222,6 +222,66 @@ struct RetryPolicyAdvancedTests {
         #expect(callCount.withLock { $0 } == 1)
     }
 
+    // MARK: - Circuit Breaker Rejections
+
+    @Test(
+        "without shouldRetry, a CircuitBreakerError is not retried",
+        arguments: [CircuitBreakerError.open(retryAfter: .seconds(30)), .halfOpenRejected]
+    )
+    func breakerRejectionNotRetriedByDefault(rejection: CircuitBreakerError) async {
+        let callCount = OSAllocatedUnfairLock(initialState: 0)
+        let slept = OSAllocatedUnfairLock<[Duration]>(initialState: [])
+        let policy = RetryPolicy(
+            maxAttempts: 3,
+            delay: .exponential(base: .seconds(1)),
+            sleep: { duration in slept.withLock { $0.append(duration) } }
+        )
+
+        await #expect(throws: rejection) {
+            try await policy.execute {
+                callCount.withLock { $0 += 1 }
+                throw rejection
+            }
+        }
+
+        #expect(callCount.withLock { $0 } == 1)
+        #expect(slept.withLock { $0 }.isEmpty, "no backoff is waited out")
+    }
+
+    @Test("a shouldRetry that allows CircuitBreakerError retries an open breaker")
+    func shouldRetryCanRetryOpenBreaker() async {
+        // The predicate replaces the default rather than refining it, so
+        // `{ _, _ in true }` restores retrying through every rejection.
+        let start = ContinuousClock().now
+        let rejections = OSAllocatedUnfairLock(initialState: 0)
+        let breaker = CircuitBreaker(
+            failureThreshold: 1,
+            timeout: .seconds(30),
+            onEvent: { event in
+                if case .circuitCallRejected = event { rejections.withLock { $0 += 1 } }
+            },
+            now: { start }
+        )
+        try? await breaker.execute { throw TestError() }
+
+        let slept = OSAllocatedUnfairLock<[Duration]>(initialState: [])
+        let policy = RetryPolicy(
+            maxAttempts: 3,
+            delay: .exponential(base: .seconds(1)),
+            sleep: { duration in slept.withLock { $0.append(duration) } }
+        )
+
+        await #expect(throws: CircuitBreakerError.self) {
+            try await PolicyChain
+                .retry(policy, shouldRetry: { _, _ in true })
+                .circuitBreaker(breaker)
+                .execute { 1 }
+        }
+
+        #expect(rejections.withLock { $0 } == 3)
+        #expect(slept.withLock { $0 } == [.seconds(1), .seconds(2)])
+    }
+
     // MARK: - Properties
 
     @Test("public properties reflect init parameters")

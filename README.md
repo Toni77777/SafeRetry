@@ -116,7 +116,7 @@ let response = try await policy.execute {
 
 ### Only retry what makes sense
 
-Not every failure is worth retrying. A 4xx response means the client is wrong; retrying won't help. Use `shouldRetry` to filter:
+Not every failure is worth retrying. A 4xx response means the client is wrong; retrying won't help. Without a predicate, a policy retries every error except `CircuitBreakerError` (see [Choosing an order](#choosing-an-order)). Use `shouldRetry` to filter — it replaces that default rather than adding to it:
 
 ```swift
 enum APIError: Error {
@@ -329,11 +329,9 @@ A working mental model: **outer policies see aggregate behaviour; inner policies
 
 - `timeout` **outside** `retry` — bounds the *entire* operation including all retries. Often what you want.
 - `timeout` **inside** `retry` — bounds *each individual attempt*. Useful when one attempt can hang but you still want 2 more tries.
-- `circuitBreaker` **inside** `retry` — every attempt goes through the breaker, so a tripped breaker makes each attempt fail immediately without touching the dependency. It does *not* cut the loop short: all attempts still run and every backoff delay is still waited out. Add a predicate if you want the loop to give up at the first rejection:
+- `circuitBreaker` **inside** `retry` — every attempt goes through the breaker, so a tripped breaker rejects the attempt immediately without touching the dependency, and the retry gives up there: without a `shouldRetry`, a `CircuitBreakerError` is not retried, so no backoff is waited out against a breaker that would only reject again. A predicate you pass decides for `CircuitBreakerError` too, so one that returns `true` for it runs every attempt and waits out every backoff delay between the rejections:
   ```swift
-  .retry(attempts: 3, delay: .exponential(base: .seconds(1))) { error, _ in
-      !(error is CircuitBreakerError)
-  }
+  .retry(attempts: 3, delay: .exponential(base: .seconds(1))) { _, _ in true }
   ```
 - `circuitBreaker` **outside** `retry` — the breaker sees one call per *whole* retry sequence, so an exhausted 3-attempt sequence records a single failure. The dependency still takes all 3 attempts, which defeats the point of a breaker; keep it inside.
 
@@ -375,10 +373,9 @@ let chain = PolicyChain.Preset.default.circuitBreaker(myBreaker)
 ```
 
 Attempt counts include the first call, so `.default` retries at most twice.
-A preset's retry carries no `shouldRetry`, so against an open breaker it still
-makes every attempt and waits out every backoff delay — about 3 s for
-`.default`, about three minutes for `.aggressive`. When that matters, build the
-chain yourself with the predicate from [Choosing an order](#choosing-an-order).
+A preset's retry carries no `shouldRetry`, so it retries every error except
+`CircuitBreakerError`: against an open breaker it gives up at the first
+rejection instead of waiting out its backoff.
 
 `.conservative` puts the timeout *inside* the retry so a slow first attempt
 cannot consume the whole budget. Presets deliberately exclude a circuit
@@ -430,8 +427,8 @@ HTTP 5xx responses are mapped to `ServerError(statusCode:)` so retry policies ca
 transient-error allowlist (the `URLError` codes above plus `ServerError`), so a
 `badURL` fails once. `resilience:` retries whatever the chain's retry policy
 retries — and the `retry(attempts:)` shorthand and the presets carry no
-`shouldRetry`, so they retry *everything*. Pass a predicate when you want the
-filtered behaviour:
+`shouldRetry`, so they retry every error except `CircuitBreakerError`,
+transient or not. Pass a predicate when you want the filtered behaviour:
 
 ```swift
 let chain = PolicyChain

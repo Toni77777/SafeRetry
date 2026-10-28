@@ -89,25 +89,40 @@ public struct RetryPolicy: Sendable {
 
     /// Executes `operation`, retrying on failure up to ``maxAttempts`` times.
     ///
+    /// Every error is retried except ``CircuitBreakerError``. A breaker that
+    /// rejected one attempt would reject the next as well, so retrying it only
+    /// waits out the backoff schedule without the operation ever running. To
+    /// retry breaker rejections anyway, pass `{ _, _ in true }` to the
+    /// `shouldRetry` overload.
+    ///
     /// - Parameter operation: The async throwing closure to attempt.
     /// - Returns: The value produced by `operation` on the first successful attempt.
-    /// - Throws: The last error if all attempts are exhausted, or the
+    /// - Throws: The last error if all attempts are exhausted, a
+    ///   ``CircuitBreakerError`` as soon as an attempt throws one, or the
     ///   cancellation error if the task is cancelled. A cancelled attempt does
     ///   not consume the retry budget; both `CancellationError` and
     ///   `URLError(.cancelled)` count as cancellation.
     ///
-    /// - Note: A cancelled attempt emits no terminal event — see the
-    ///   `shouldRetry` overload for the full event contract.
+    /// - Note: A ``CircuitBreakerError`` ends the sequence the way a
+    ///   `shouldRetry` veto does, so it emits no
+    ///   ``PolicyEvent/retryExhausted(totalAttempts:lastError:)``. A cancelled
+    ///   attempt emits no terminal event at all — see the `shouldRetry`
+    ///   overload for the full event contract.
     public func execute<T: Sendable>(
         _ operation: @Sendable () async throws -> T
     ) async throws -> T {
-        try await execute(shouldRetry: { _, _ in true }, operation)
+        try await execute(shouldRetry: { error, _ in !(error is CircuitBreakerError) }, operation)
     }
 
     /// Executes `operation`, retrying only when `shouldRetry` returns `true`.
     ///
     /// Use this overload to stop retrying for non-transient failures while still
     /// using the policy's attempt count and delay configuration.
+    ///
+    /// The predicate replaces the default of ``execute(_:)`` rather than
+    /// refining it, so it is consulted for ``CircuitBreakerError`` too: a
+    /// predicate that returns `true` for one keeps retrying an open breaker
+    /// and waits out every backoff delay between the rejections.
     ///
     /// - Parameters:
     ///   - shouldRetry: Predicate that decides whether a failed attempt should be retried.
