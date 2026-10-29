@@ -9,12 +9,9 @@ Add SafeRetry as a dependency in your `Package.swift` or via Xcode's
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Toni77777/SafeRetry.git", branch: "main")
+    .package(url: "https://github.com/Toni77777/SafeRetry.git", from: "1.0.0")
 ]
 ```
-
-> Important: no version has been tagged yet, so depend on `branch: "main"`.
-> Once `1.0.0` is tagged, switch to `from: "1.0.0"`.
 
 Then add the `SafeRetry` product to your target's dependencies:
 

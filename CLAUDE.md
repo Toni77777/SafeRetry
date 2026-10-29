@@ -127,7 +127,7 @@ xcodebuild build -scheme SafeRetry -destination 'generic/platform=iOS Simulator'
   breaker, `.circuitBreaker(b).timeout(…)`. The reverse order hides hung calls
   from the breaker, so show it only as the anti-pattern.
 - **Install snippets** in the README, GettingStarted and MigratingFromRxSwift
-  must agree. Until the first tag they use `branch: "main"`; the release commit
-  switches them to `from:`.
+  must agree. They use `from:` with the latest minor release (`from: "1.0.0"`);
+  the release commit of a new minor or major version bumps all three.
 - **Unfixed review findings** go to GitHub Issues, not into files committed
   to the repository.
