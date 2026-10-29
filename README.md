@@ -15,12 +15,9 @@ Add the package to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Toni77777/SafeRetry.git", branch: "main")
+    .package(url: "https://github.com/Toni77777/SafeRetry.git", from: "1.0.0")
 ]
 ```
-
-> **Note:** no version has been tagged yet, so depend on `branch: "main"` for now.
-> Once `1.0.0` is tagged, switch to `from: "1.0.0"`.
 
 Then add the `SafeRetry` product to your target:
 
@@ -773,7 +770,7 @@ pushing a semver tag — no automation involved:
 
 ```bash
 git checkout main && git pull
-git tag 1.0.0
+git tag -a 1.0.0 -m "SafeRetry 1.0.0"
 git push origin 1.0.0
 ```
 
