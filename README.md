@@ -687,21 +687,23 @@ let result = try await chain.execute { try await api.query() }
 
 ## Feature matrix
 
-| Feature | SafeRetry | swift-retry | Kitura CircuitBreaker |
+| Feature | SafeRetry | [swift-retry](https://github.com/fumoboy007/swift-retry) | [Kitura CircuitBreaker](https://github.com/Kitura/CircuitBreaker) |
 |---|:---:|:---:|:---:|
-| Swift 6 / strict concurrency | ✅ | Partial | ❌ |
+| Swift 6 / strict concurrency | ✅ | Swift 5 mode | ❌ |
 | async/await native | ✅ | ✅ | ❌ (callback) |
 | Retry with backoff | ✅ | ✅ | ❌ |
-| Exponential + jitter | ✅ | Limited | ❌ |
+| Exponential + jitter | ✅ | ✅ (full jitter) | ❌ |
 | Circuit breaker | ✅ | ❌ | ✅ |
-| Timeout policy | ✅ | ❌ | ❌ |
-| Fallback policy | ✅ | ❌ | ❌ |
+| Timeout policy | ✅ | ❌ | Per call, inside the breaker |
+| Fallback policy | ✅ | ❌ | ✅ (callback) |
 | Policy composition | ✅ | ❌ | ❌ |
 | Named policy registry | ✅ | ❌ | ❌ |
 | AsyncStream observability | ✅ | ❌ | ❌ |
 | URLSession extension | ✅ | ❌ | ❌ |
-| Zero dependencies | ✅ | ✅ | ❌ |
-| iOS 16+ / macOS 13+ | ✅ | ✅ | macOS only |
+| Zero dependencies | ✅ | ❌ (swift-log) | ❌ (LoggerAPI) |
+| iOS 16+ / macOS 13+ | ✅ | ✅ | macOS, Linux |
+
+Compared against swift-retry 0.2.4 and Kitura CircuitBreaker 5.1.0.
 
 ## Components
 

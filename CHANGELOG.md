@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `.spi.yml`, so the Swift Package Index builds and hosts the DocC
+  documentation for the `SafeRetry` target.
+
+### Documentation
+
+- Corrected the README's feature matrix, which misstated the libraries it
+  compares against. swift-retry does support exponential backoff with full
+  jitter, but depends on swift-log. Kitura CircuitBreaker has a per-call timeout
+  and a fallback callback, and supports Linux as well as macOS. The table now
+  links both libraries and names the versions it was checked against.
+
 ## [1.0.0] - 2026-10-29
 
 The first release. Everything below is new; the history of the work that led
